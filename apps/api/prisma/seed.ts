@@ -209,7 +209,10 @@ async function main() {
     return;
   }
 
-  for (const [sku, code, qty] of stock) {
+  // Fast-moving items get a bigger main-warehouse count so a busy order book can be served.
+  const FAST_MOVERS = new Set(["TEE-BLK-M", "TEE-BLK-L", "TEE-WHT-M", "TEE-WHT-L", "HOOD-GRY-M", "HOOD-GRY-L", "BTL-STL-750", "BAG-TOTE", "NOTE-A5", "STK-LOGO"]);
+  for (const [sku, code, rawQty] of stock) {
+    const qty = rawQty + (FAST_MOVERS.has(sku) && !code.startsWith("OVF") ? 250 : 0);
     const product = await prisma.product.findUniqueOrThrow({ where: { sku } });
     const location = await prisma.location.findUniqueOrThrow({ where: { code } });
     await prisma.stockLevel.upsert({
@@ -262,6 +265,50 @@ async function main() {
       createdH: 2 + rand() * 8,
     });
   }
+
+  // A busy order book (about 290 orders in total): recent shipped history plus orders at every stage.
+  // Orders past "Processed" only use main-warehouse stock, so the mug (which needs an overflow
+  // move in the hand-made example above) is left out of them.
+  const movable = stockable.filter((s) => s !== "MUG-WHT");
+  const courierCodes = ["FSX", "QPS", "QPS", "ECO"];
+  let next = 39;
+  const randomLines = (pool: string[]): [string, number][] => {
+    const used = new Set<string>();
+    const out: [string, number][] = [];
+    const want = 1 + Math.floor(rand() * 3);
+    while (out.length < want) {
+      const sku = pickOne(pool);
+      if (used.has(sku)) continue;
+      used.add(sku);
+      out.push([sku, 1 + Math.floor(rand() * 3)]);
+    }
+    return out;
+  };
+  const bulk = async (count: number, status: string, timing: () => { ageH: number; dueH: number }, pool = movable) => {
+    for (let i = 0; i < count; i++) {
+      const { ageH, dueH } = timing();
+      const priority = rand() < 0.2 ? "PRIORITY" : "STANDARD";
+      await makeOrder({
+        ref: `SO-${String(next++).padStart(5, "0")}`,
+        customer: pickOne(names),
+        channel: pickOne(channels),
+        priority,
+        dueH,
+        status,
+        lines: randomLines(pool),
+        courier: status === "RECEIVED" || status === "CANCELLED" ? undefined : pickOne(courierCodes),
+        ageH,
+        createdH: ageH + 1 + rand() * 6,
+      });
+    }
+  };
+  await bulk(150, "SHIPPED", () => { const a = 2 + rand() * 96; return { ageH: a, dueH: -a + 6 }; });
+  await bulk(12, "CANCELLED", () => ({ ageH: 2 + rand() * 60, dueH: 10 }));
+  await bulk(15, "STAGED", () => ({ ageH: rand() * 3, dueH: 2 + rand() * 28 }));
+  await bulk(10, "PACKING", () => ({ ageH: rand() * 1.5, dueH: 1 + rand() * 20 }));
+  await bulk(12, "PICKING", () => ({ ageH: rand() < 0.2 ? 3.5 + rand() * 2 : rand() * 2, dueH: rand() < 0.15 ? -0.5 : 1 + rand() * 20 }));
+  await bulk(12, "PROCESSED", () => ({ ageH: rand() * 2, dueH: 1 + rand() * 24 }));
+  await bulk(40, "RECEIVED", () => ({ ageH: rand() < 0.15 ? 5 + rand() * 3 : rand() * 3, dueH: rand() < 0.1 ? -1 : 1 + rand() * 36 }), stockable);
 
   // Inbound deliveries at each stage.
   const tee = await prisma.product.findUniqueOrThrow({ where: { sku: "TEE-BLK-M" } });
