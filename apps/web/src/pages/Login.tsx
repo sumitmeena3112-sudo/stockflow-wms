@@ -21,7 +21,8 @@ export default function Login() {
   return (
     <div className="login">
       <form className="card" onSubmit={submit}>
-        <h2>StockFlow WMS</h2>
+        <h2>StockFlow</h2>
+        <p className="muted small">Order fulfillment hub</p>
         <label>
           Email
           <input value={email} onChange={(e) => setEmail(e.target.value)} />
@@ -32,7 +33,10 @@ export default function Login() {
         </label>
         {error && <p className="error">{error}</p>}
         <button type="submit">Sign in</button>
-        <p className="muted small">Demo: admin@stockflow.local / Admin@12345</p>
+        <div className="muted small">
+          <div>Office: admin@stockflow.local / Admin@12345</div>
+          <div>Warehouse: picker@stockflow.local / Picker@12345</div>
+        </div>
       </form>
     </div>
   );

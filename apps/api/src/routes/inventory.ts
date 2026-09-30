@@ -1,8 +1,8 @@
 import { Router } from "express";
-import { z } from "zod";
 import { prisma } from "../db.js";
-import { requireAuth, requireRole } from "../auth.js";
-import { HttpError, wrap } from "../http.js";
+import { requireAuth } from "../auth.js";
+import { wrap } from "../http.js";
+import { orderAlerts } from "../alerts.js";
 
 export const inventory = Router();
 inventory.use(requireAuth);
@@ -11,43 +11,10 @@ inventory.get(
   "/inventory",
   wrap(async (_req, res) => {
     const rows = await prisma.stockLevel.findMany({
-      include: { product: true, location: true },
+      include: { product: true, location: { include: { warehouse: true } } },
       orderBy: [{ product: { sku: "asc" } }, { location: { code: "asc" } }],
     });
     res.json(rows.map((r) => ({ ...r, available: r.onHand - r.reserved })));
-  }),
-);
-
-// Receive inbound goods into a bin.
-inventory.post(
-  "/inventory/receive",
-  requireRole("ADMIN"),
-  wrap(async (req, res) => {
-    const { productId, locationId, quantity } = z
-      .object({
-        productId: z.string(),
-        locationId: z.string(),
-        quantity: z.number().int().positive(),
-      })
-      .parse(req.body);
-
-    const [product, location] = await Promise.all([
-      prisma.product.findUnique({ where: { id: productId } }),
-      prisma.location.findUnique({ where: { id: locationId } }),
-    ]);
-    if (!product || !location) throw new HttpError(404, "Product or location not found");
-
-    await prisma.$transaction([
-      prisma.stockLevel.upsert({
-        where: { productId_locationId: { productId, locationId } },
-        create: { productId, locationId, onHand: quantity },
-        update: { onHand: { increment: quantity } },
-      }),
-      prisma.stockMovement.create({
-        data: { productId, locationId, delta: quantity, type: "INBOUND", note: "Goods received" },
-      }),
-    ]);
-    res.status(201).json({ ok: true });
   }),
 );
 
@@ -67,16 +34,68 @@ inventory.get(
 inventory.get(
   "/dashboard",
   wrap(async (_req, res) => {
-    const [grouped, levels] = await Promise.all([
-      prisma.order.groupBy({ by: ["status"], _count: true }),
-      prisma.stockLevel.findMany(),
-    ]);
+    const [grouped, levels, openOrders, openIssues, transfers, deliveries, stagedOrders] =
+      await Promise.all([
+        prisma.order.groupBy({ by: ["status"], _count: true }),
+        prisma.stockLevel.findMany({ include: { location: { include: { warehouse: true } } } }),
+        prisma.order.findMany({
+          where: { status: { notIn: ["SHIPPED", "CANCELLED"] } },
+          include: { courier: true },
+        }),
+        prisma.issue.count({ where: { status: "OPEN" } }),
+        prisma.allocation.count({
+          where: { needsTransfer: true, orderLine: { order: { status: { in: ["PROCESSED", "PICKING"] } } } },
+        }),
+        prisma.delivery.count({ where: { status: { not: "PUT_AWAY" } } }),
+        prisma.order.findMany({
+          where: { status: "STAGED" },
+          include: { courier: true },
+        }),
+      ]);
+
     const orders: Record<string, number> = {};
     for (const g of grouped) orders[g.status] = g._count;
+
+    const attention = openOrders
+      .map((o) => ({
+        id: o.id,
+        reference: o.reference,
+        customer: o.customer,
+        priority: o.priority,
+        status: o.status,
+        dueAt: o.dueAt,
+        alerts: orderAlerts(o),
+      }))
+      .filter((o) => o.alerts.length > 0)
+      .sort(
+        (a, b) =>
+          Number(b.alerts.some((x) => x.severity === "high")) -
+            Number(a.alerts.some((x) => x.severity === "high")) ||
+          a.dueAt.getTime() - b.dueAt.getTime(),
+      );
+
+    const pickups: Record<string, { courier: string; pickupTime: string; staged: number }> = {};
+    for (const o of stagedOrders) {
+      if (!o.courier) continue;
+      pickups[o.courier.id] ??= { courier: o.courier.name, pickupTime: o.courier.pickupTime, staged: 0 };
+      pickups[o.courier.id].staged += 1;
+    }
+
     res.json({
       orders,
+      openOrders: openOrders.length,
+      priorityOpen: openOrders.filter((o) => o.priority === "PRIORITY").length,
+      overdue: attention.filter((o) => o.alerts.some((a) => a.code === "OVERDUE")).length,
+      attention: attention.slice(0, 10),
+      openIssues,
+      pendingTransfers: transfers,
+      deliveriesInProgress: deliveries,
+      pickups: Object.values(pickups),
       totalOnHand: levels.reduce((s, l) => s + l.onHand, 0),
       totalReserved: levels.reduce((s, l) => s + l.reserved, 0),
+      overflowUnits: levels
+        .filter((l) => !l.location.warehouse.isMain)
+        .reduce((s, l) => s + l.onHand, 0),
       lowStockBins: levels.filter((l) => l.onHand - l.reserved <= 5).length,
     });
   }),

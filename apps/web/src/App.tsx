@@ -2,10 +2,14 @@ import { Navigate, NavLink, Route, Routes, useNavigate } from "react-router-dom"
 import { clearSession, getToken, getUser } from "./api";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
+import Warehouse from "./pages/Warehouse";
 import Products from "./pages/Products";
 import Inventory from "./pages/Inventory";
 import Orders from "./pages/Orders";
 import OrderDetail from "./pages/OrderDetail";
+import Label from "./pages/Label";
+import Deliveries from "./pages/Deliveries";
+import Issues from "./pages/Issues";
 
 function Layout({ children }: { children: React.ReactNode }) {
   const user = getUser();
@@ -13,17 +17,18 @@ function Layout({ children }: { children: React.ReactNode }) {
   return (
     <div className="shell">
       <header className="topbar">
-        <strong>StockFlow WMS</strong>
+        <strong>StockFlow</strong>
         <nav>
-          <NavLink to="/">Dashboard</NavLink>
-          <NavLink to="/products">Products</NavLink>
-          <NavLink to="/inventory">Inventory</NavLink>
+          <NavLink to="/" end>Dashboard</NavLink>
+          <NavLink to="/warehouse">Warehouse</NavLink>
           <NavLink to="/orders">Orders</NavLink>
+          <NavLink to="/deliveries">Deliveries</NavLink>
+          <NavLink to="/inventory">Inventory</NavLink>
+          <NavLink to="/products">Products</NavLink>
+          <NavLink to="/issues">Issues</NavLink>
         </nav>
         <span className="spacer" />
-        <span className="muted">
-          {user?.name} ({user?.role})
-        </span>
+        <span className="muted small">{user?.name}</span>
         <button
           className="ghost"
           onClick={() => {
@@ -41,6 +46,7 @@ function Layout({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   const authed = !!getToken();
+  const isPicker = getUser()?.role === "PICKER";
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
@@ -50,11 +56,15 @@ export default function App() {
           element={
             <Layout>
               <Routes>
-                <Route path="/" element={<Dashboard />} />
+                <Route path="/" element={isPicker ? <Navigate to="/warehouse" replace /> : <Dashboard />} />
+                <Route path="/warehouse" element={<Warehouse />} />
                 <Route path="/products" element={<Products />} />
                 <Route path="/inventory" element={<Inventory />} />
                 <Route path="/orders" element={<Orders />} />
                 <Route path="/orders/:id" element={<OrderDetail />} />
+                <Route path="/orders/:id/label" element={<Label />} />
+                <Route path="/deliveries" element={<Deliveries />} />
+                <Route path="/issues" element={<Issues />} />
               </Routes>
             </Layout>
           }

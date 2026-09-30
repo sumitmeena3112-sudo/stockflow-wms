@@ -11,6 +11,7 @@ const secret = () => {
 export interface AuthUser {
   id: string;
   role: string;
+  name: string;
 }
 
 declare module "express-serve-static-core" {
@@ -27,7 +28,7 @@ export function requireAuth(req: Request, _res: Response, next: NextFunction) {
   const token = header.startsWith("Bearer ") ? header.slice(7) : "";
   try {
     const payload = jwt.verify(token, secret()) as AuthUser;
-    req.user = { id: payload.id, role: payload.role };
+    req.user = { id: payload.id, role: payload.role, name: payload.name };
     next();
   } catch {
     next(new HttpError(401, "Not authenticated"));
@@ -42,3 +43,4 @@ export const requireRole =
     }
     next();
   };
+

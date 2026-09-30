@@ -1,36 +1,59 @@
-# StockFlow WMS
+# StockFlow: Order Fulfillment Hub
 
-A small warehouse management system: receive stock into bins, reserve it when an order is confirmed, walk a pick list, and ship.
+A simple fulfillment app for a small e-commerce business that ships 200-300 orders a day from its own warehouse. It replaces spreadsheets and shared folders with one place where the office and the warehouse team see the same order status.
 
-**Stack:** React 18 + Vite (web), Express + TypeScript (API), Prisma + SQLite (database), JWT auth. No Docker needed.
+**Stack:** React 18 + Vite (web), Express + TypeScript (API), Prisma + SQLite (database), JWT login. No Docker needed.
 
 ## Run locally
 
 Requires Node.js 18 or newer.
 
 ```bash
-npm run setup   # installs deps, creates the SQLite DB, seeds demo data
+npm run setup   # installs deps, creates the SQLite DB, loads demo data
 npm run dev     # API on :4000, web on :5173
 ```
 
 Open http://localhost:5173 and sign in:
 
-| Role   | Email                    | Password      |
-| ------ | ------------------------ | ------------- |
-| Admin  | admin@stockflow.local    | Admin@12345   |
-| Picker | picker@stockflow.local   | Picker@12345  |
+| Team                | Email                  | Password     |
+| ------------------- | ---------------------- | ------------ |
+| Office (admin)      | admin@stockflow.local  | Admin@12345  |
+| Warehouse (picker)  | picker@stockflow.local | Picker@12345 |
 
-These are demo accounts for local use only. Change `JWT_SECRET` in `apps/api/.env` (copy from `.env.example`) for anything real.
+These are demo accounts for local use. Change `JWT_SECRET` in `apps/api/.env` (copy from `.env.example`) for anything real.
 
-## Order lifecycle
+To reset the demo data, stop the app, delete `apps/api/prisma/dev.db`, then run `npm run setup` again.
 
-`DRAFT` → **confirm** (stock reserved, pick list built) → `CONFIRMED` → **pick** each row → `PICKING` → `PACKED` → **ship** (stock deducted) → `SHIPPED`.
-Cancelling releases any reserved stock. Admins manage products, bins, receiving and orders; pickers can only mark pick rows as picked.
+## The workflow it supports
+
+| Step | What the app does |
+| --- | --- |
+| 1. Order received | Orders carry a channel, a same-day **priority** flag and a **ship-by deadline**. |
+| 2. Order processed | Office picks a courier (cost, speed, pickup time). The app **suggests one**: fastest for priority orders, cheapest for the rest. Processing creates a **printable shipping label** and **reserves stock**. Many orders can be processed in one click. |
+| 3. Picking | A pick list shows the exact bin. The picker **scans the SKU**; the wrong product or variant is blocked and logged. Stock in the **second warehouse** is flagged and must be **moved to the main warehouse** before it can be picked. |
+| 4. Packing | Each item is **verified again** as it goes in the box. |
+| 5. Staging | The box moves to its courier's staging lane. |
+| 6. Shipping | When the courier arrives, one click hands over every staged box for that courier and deducts the stock. |
+| Inbound | Deliveries are **counted**, damage noted, then **put away** on shelves. Stock is only sellable after put-away. Differences are logged as issues. |
+
+## How it answers the problems in the brief
+
+| Problem | Answer |
+| --- | --- |
+| Hard to see order status | Dashboard pipeline, order list with filters, step tracker and full history on every order |
+| Delays go unnoticed | Alerts for overdue, due soon, **no progress for too long**, and courier pickup time passed |
+| Priority orders miss deadlines | Priority flag, deadline, urgency-sorted task queue |
+| Stock missing or can't be found | Reserved vs on-hand per bin, exact bin on the pick list, short stock is refused and logged |
+| Wrong product or variant shipped | SKU scan at pick **and** pack; mismatches blocked and logged |
+| Boxes misplaced or courier misses pickup | Staging lanes, per-courier handover, missed-pickup alert |
+| Problems handled informally | **Issues** log: automatic entries plus manual reports, open until resolved with a note |
+| Team not comfortable with technology | A single **Warehouse** screen lists tasks in order, with large buttons; pickers land there on sign-in |
 
 ## Layout
 
 ```
-apps/api   Express API, Prisma schema (prisma/), stock allocation logic (src/allocate.ts)
+apps/api   Express API, Prisma schema (prisma/), stock allocation (src/allocate.ts),
+           delay alerts (src/alerts.ts), courier suggestion (src/courier.ts)
 apps/web   React single-page app
 ```
 

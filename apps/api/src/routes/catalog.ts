@@ -19,7 +19,7 @@ catalog.post(
       throw new HttpError(401, "Wrong email or password");
     }
     res.json({
-      token: signToken({ id: user.id, role: user.role }),
+      token: signToken({ id: user.id, role: user.role, name: user.name }),
       user: { id: user.id, name: user.name, email: user.email, role: user.role },
     });
   }),
@@ -40,20 +40,33 @@ catalog.post(
   requireRole("ADMIN"),
   wrap(async (req, res) => {
     const data = z
-      .object({ sku: z.string().trim().min(1), name: z.string().trim().min(1) })
+      .object({
+        sku: z.string().trim().min(1),
+        name: z.string().trim().min(1),
+        variant: z.string().trim().optional(),
+      })
       .parse(req.body);
     if (await prisma.product.findUnique({ where: { sku: data.sku } })) {
       throw new HttpError(409, "SKU already exists");
     }
-    res.status(201).json(await prisma.product.create({ data }));
+    res.status(201).json(await prisma.product.create({ data: { ...data, variant: data.variant || null } }));
   }),
 );
 
-// ---- locations ----
+// ---- warehouses and bins ----
+catalog.get(
+  "/warehouses",
+  wrap(async (_req, res) => {
+    res.json(await prisma.warehouse.findMany({ orderBy: { code: "asc" } }));
+  }),
+);
+
 catalog.get(
   "/locations",
   wrap(async (_req, res) => {
-    res.json(await prisma.location.findMany({ orderBy: { code: "asc" } }));
+    res.json(
+      await prisma.location.findMany({ include: { warehouse: true }, orderBy: { code: "asc" } }),
+    );
   }),
 );
 
@@ -61,10 +74,23 @@ catalog.post(
   "/locations",
   requireRole("ADMIN"),
   wrap(async (req, res) => {
-    const data = z.object({ code: z.string().trim().min(1) }).parse(req.body);
+    const data = z
+      .object({ code: z.string().trim().min(1), warehouseId: z.string() })
+      .parse(req.body);
     if (await prisma.location.findUnique({ where: { code: data.code } })) {
       throw new HttpError(409, "Location already exists");
     }
+    if (!(await prisma.warehouse.findUnique({ where: { id: data.warehouseId } }))) {
+      throw new HttpError(404, "Warehouse not found");
+    }
     res.status(201).json(await prisma.location.create({ data }));
+  }),
+);
+
+// ---- couriers ----
+catalog.get(
+  "/couriers",
+  wrap(async (_req, res) => {
+    res.json(await prisma.courier.findMany({ where: { active: true }, orderBy: { cost: "desc" } }));
   }),
 );

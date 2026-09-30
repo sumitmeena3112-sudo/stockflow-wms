@@ -6,6 +6,7 @@ import cors from "cors";
 import { catalog } from "./routes/catalog.js";
 import { inventory } from "./routes/inventory.js";
 import { orders } from "./routes/orders.js";
+import { support } from "./routes/support.js";
 import { errorHandler } from "./http.js";
 
 const app = express();
@@ -16,6 +17,7 @@ app.get("/api/health", (_req, res) => res.json({ ok: true }));
 app.use("/api", catalog);
 app.use("/api", inventory);
 app.use("/api", orders);
+app.use("/api", support);
 app.use(errorHandler);
 
 // In production the API also serves the built web app, so one service is enough.

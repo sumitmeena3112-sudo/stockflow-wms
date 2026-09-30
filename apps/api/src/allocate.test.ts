@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { allocate } from "./allocate.js";
+import { allocate, allocateWithOverflow } from "./allocate.js";
 
 test("takes from the fullest bin first", () => {
   const result = allocate(
@@ -33,4 +33,24 @@ test("returns null when stock is insufficient", () => {
 
 test("ignores empty bins", () => {
   assert.equal(allocate([{ id: "a", available: 0 }], 1), null);
+});
+
+test("uses the main warehouse only when it has enough", () => {
+  const plan = allocateWithOverflow([{ id: "m", available: 10 }], [{ id: "o", available: 50 }], 8);
+  assert.deepEqual(plan, [{ binId: "m", quantity: 8, overflow: false }]);
+});
+
+test("falls back to overflow for the remainder and flags it", () => {
+  const plan = allocateWithOverflow([{ id: "m", available: 10 }], [{ id: "o", available: 50 }], 25);
+  assert.deepEqual(plan, [
+    { binId: "m", quantity: 10, overflow: false },
+    { binId: "o", quantity: 15, overflow: true },
+  ]);
+});
+
+test("returns null when main plus overflow cannot cover it", () => {
+  assert.equal(
+    allocateWithOverflow([{ id: "m", available: 5 }], [{ id: "o", available: 5 }], 11),
+    null,
+  );
 });
