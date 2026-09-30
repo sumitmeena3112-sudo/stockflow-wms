@@ -1,0 +1,100 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// role: ADMIN | PICKER
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         String   @default("PICKER")
+  createdAt    DateTime @default(now())
+}
+
+model Product {
+  id        String   @id @default(cuid())
+  sku       String   @unique
+  name      String
+  createdAt DateTime @default(now())
+
+  stock      StockLevel[]
+  orderLines OrderLine[]
+  movements  StockMovement[]
+}
+
+model Location {
+  id   String @id @default(cuid())
+  code String @unique
+
+  stock     StockLevel[]
+  movements StockMovement[]
+}
+
+model StockLevel {
+  id         String @id @default(cuid())
+  productId  String
+  locationId String
+  onHand     Int    @default(0)
+  reserved   Int    @default(0)
+
+  product     Product      @relation(fields: [productId], references: [id])
+  location    Location     @relation(fields: [locationId], references: [id])
+  allocations Allocation[]
+
+  @@unique([productId, locationId])
+}
+
+// status: DRAFT | CONFIRMED | PICKING | PACKED | SHIPPED | CANCELLED
+model Order {
+  id        String   @id @default(cuid())
+  reference String   @unique
+  customer  String
+  status    String   @default("DRAFT")
+  createdAt DateTime @default(now())
+
+  lines OrderLine[]
+}
+
+model OrderLine {
+  id        String @id @default(cuid())
+  orderId   String
+  productId String
+  quantity  Int
+  picked    Int    @default(0)
+
+  order       Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product     Product      @relation(fields: [productId], references: [id])
+  allocations Allocation[]
+}
+
+// A reservation of stock from one bin for one order line (this is the pick list).
+model Allocation {
+  id           String  @id @default(cuid())
+  orderLineId  String
+  stockLevelId String
+  quantity     Int
+  picked       Boolean @default(false)
+
+  orderLine  OrderLine  @relation(fields: [orderLineId], references: [id], onDelete: Cascade)
+  stockLevel StockLevel @relation(fields: [stockLevelId], references: [id])
+}
+
+// type: INBOUND | OUTBOUND
+model StockMovement {
+  id         String   @id @default(cuid())
+  productId  String
+  locationId String
+  delta      Int
+  type       String
+  note       String?
+  createdAt  DateTime @default(now())
+
+  product  Product  @relation(fields: [productId], references: [id])
+  location Location @relation(fields: [locationId], references: [id])
+}

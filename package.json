@@ -1,0 +1,19 @@
+{
+  "name": "stockflow-wms",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A small warehouse management system: inbound stock, order reservation, picking and shipping.",
+  "license": "MIT",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "setup": "npm install && npm run db:push -w apps/api && npm run db:seed -w apps/api",
+    "dev": "concurrently -n api,web -c blue,green \"npm run dev -w apps/api\" \"npm run dev -w apps/web\"",
+    "build": "npm run build -w apps/web",
+    "test": "npm test -w apps/api"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0"
+  }
+}
