@@ -1,4 +1,6 @@
 import "dotenv/config";
+import fs from "node:fs";
+import path from "node:path";
 import express from "express";
 import cors from "cors";
 import { catalog } from "./routes/catalog.js";
@@ -15,6 +17,13 @@ app.use("/api", catalog);
 app.use("/api", inventory);
 app.use("/api", orders);
 app.use(errorHandler);
+
+// In production the API also serves the built web app, so one service is enough.
+const webDist = path.resolve(import.meta.dirname, "../../web/dist");
+if (fs.existsSync(webDist)) {
+  app.use(express.static(webDist));
+  app.get(/^(?!\/api).*/, (_req, res) => res.sendFile(path.join(webDist, "index.html")));
+}
 
 const port = Number(process.env.PORT ?? 4000);
 app.listen(port, () => console.log(`API listening on http://localhost:${port}`));
