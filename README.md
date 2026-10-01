@@ -6,10 +6,12 @@ A simple fulfillment app for a small e-commerce business that ships 200-300 orde
 
 ## Run locally
 
-Requires Node.js 18 or newer.
+Requires [Node.js](https://nodejs.org) 18.18 or newer (20+ recommended) and Git. No database server or Docker is needed.
 
 ```bash
-npm run setup   # installs deps, creates the SQLite DB, loads demo data
+git clone https://github.com/sumitmeena3112-sudo/stockflow-wms.git
+cd stockflow-wms
+npm run setup   # creates apps/api/.env, installs dependencies, creates the SQLite DB, loads demo data (about 30 s)
 npm run dev     # API on :4000, web on :5173
 ```
 

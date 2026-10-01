@@ -1,6 +1,7 @@
 import "dotenv/config";
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import express from "express";
 import cors from "cors";
 import { catalog } from "./routes/catalog.js";
@@ -21,7 +22,7 @@ app.use("/api", support);
 app.use(errorHandler);
 
 // In production the API also serves the built web app, so one service is enough.
-const webDist = path.resolve(import.meta.dirname, "../../web/dist");
+const webDist = fileURLToPath(new URL("../../web/dist", import.meta.url));
 if (fs.existsSync(webDist)) {
   app.use(express.static(webDist));
   app.get(/^(?!\/api).*/, (_req, res) => res.sendFile(path.join(webDist, "index.html")));
